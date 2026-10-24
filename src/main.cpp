@@ -38,16 +38,16 @@ namespace BufferEngine {
     int getTicks(bool isContinuous) {
         if (masterStage == 0) return 0;
         switch (masterStage) {
-            case 1: return 4;
-            case 2: return 8;
-            case 3: return 16; // Vortex
-            case 4: return 32; // Extreme
+            case 1: return 6;   // Light
+            case 2: return 12;  // Medium
+            case 3: return 20;  // Vortex (Strong lookahead)
+            case 4: return 35;  // Extreme
             case 5:
             default: {
                 int val = isContinuous
                     ? static_cast<int>(Mod::get()->getSettingValue<int64_t>("custom-wave-ticks"))
                     : static_cast<int>(Mod::get()->getSettingValue<int64_t>("custom-ticks"));
-                return (val > 0) ? val : (isContinuous ? 12 : 16);
+                return (val > 0) ? val : 20;
             }
         }
     }
@@ -121,6 +121,10 @@ class $modify(BufferPlayerHook, PlayerObject) {
             int ticks = BufferEngine::getTicks(isCont);
             if (this == pl->m_player1) BufferEngine::pressBufferP1 = ticks;
             else if (this == pl->m_player2) BufferEngine::pressBufferP2 = ticks;
+            
+            char logBuf[128];
+            std::snprintf(logBuf, sizeof(logBuf), "[BUFFER] Input registered! Buffer window set to %d ticks.\n", ticks);
+            BufferEngine::sendToCMD(logBuf);
         }
 
         return PlayerObject::pushButton(btn);
@@ -143,7 +147,7 @@ class $modify(BufferCommandHook, GJBaseGameLayer) {
                 pressBuf--;
                 BufferEngine::internalBypass = true;
 
-                // For Wave / Ship / Swing: Maintain smooth hold/release state prediction
+                // For Wave / Ship / Swing: Maintain continuous steering assist
                 if (p->m_isDart || p->m_isShip || p->m_isSwing) {
                     p->pushButton(PlayerButton::Jump);
                 } 
