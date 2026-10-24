@@ -16,7 +16,7 @@
 using namespace geode::prelude;
 
 namespace BufferEngine {
-    int masterStage = 3; // 3 = VORTEX (16 Ticks)
+    int masterStage = 3; // 3 = VORTEX (16 Ticks lookahead)
     bool threadRunning = false;
 
     int pressBufferP1 = 0;
@@ -108,7 +108,7 @@ $on_mod(Loaded) {
     BufferEngine::initConsole();
 }
 
-// Intercept raw player input and seed the predictive buffer countdown
+// 1. Capture raw player input and seed the predictive buffer countdown
 class $modify(BufferPlayerHook, PlayerObject) {
     bool pushButton(PlayerButton btn) {
         if (BufferEngine::internalBypass || btn != PlayerButton::Jump) {
@@ -121,17 +121,13 @@ class $modify(BufferPlayerHook, PlayerObject) {
             int ticks = BufferEngine::getTicks(isCont);
             if (this == pl->m_player1) BufferEngine::pressBufferP1 = ticks;
             else if (this == pl->m_player2) BufferEngine::pressBufferP2 = ticks;
-            
-            char logBuf[128];
-            std::snprintf(logBuf, sizeof(logBuf), "[BUFFER] Input registered! Buffer window set to %d ticks.\n", ticks);
-            BufferEngine::sendToCMD(logBuf);
         }
 
         return PlayerObject::pushButton(btn);
     }
 };
 
-// Sub-tick buffer execution engine (Processes clicks smoothly across physics frames)
+// 2. Sub-tick execution engine (Processes orb spam, pad hits, and pre-emptive jumps)
 class $modify(BufferCommandHook, GJBaseGameLayer) {
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
@@ -147,15 +143,12 @@ class $modify(BufferCommandHook, GJBaseGameLayer) {
                 pressBuf--;
                 BufferEngine::internalBypass = true;
 
-                // For Wave / Ship / Swing: Maintain continuous steering assist
                 if (p->m_isDart || p->m_isShip || p->m_isSwing) {
                     p->pushButton(PlayerButton::Jump);
-                } 
-                // For Cube / Orbs / Spider / Ball / Robot: Pre-emptively pulse jump & check orbs
-                else {
+                } else {
                     if (p->m_isOnGround) {
                         p->pushButton(PlayerButton::Jump);
-                        pressBuf = 0; // Consumed on successful ground hit
+                        pressBuf = 0;
                     } else {
                         p->ringJump(nullptr, false);
                     }
@@ -172,11 +165,65 @@ class $modify(BufferCommandHook, GJBaseGameLayer) {
     }
 };
 
-// Level reset cleanup
+// 3. The Real Hazard Interceptor: Catches lethal hits, alters physics, and logs every save!
 class $modify(BufferPlayLayerHook, PlayLayer) {
     void resetLevel() {
         BufferEngine::pressBufferP1 = 0;
         BufferEngine::pressBufferP2 = 0;
         PlayLayer::resetLevel();
+    }
+
+    void destroyPlayer(PlayerObject* player, GameObject* object) {
+        // Let RobTop's initial check spike pass safely
+        if (!player || object == m_anticheatSpike) {
+            PlayLayer::destroyPlayer(player, object);
+            return;
+        }
+
+        if (BufferEngine::masterStage == 0) {
+            PlayLayer::destroyPlayer(player, object);
+            return;
+        }
+
+        bool isCont = (player->m_isDart || player->m_isShip || player->m_isSwing);
+        int maxTicks = BufferEngine::getTicks(isCont);
+
+        if (maxTicks <= 0) {
+            PlayLayer::destroyPlayer(player, object);
+            return;
+        }
+
+        // Intercept death, cancel destruction, alter state, and save the player!
+        BufferEngine::internalBypass = true;
+        player->m_isDead = false;
+        double grav = player->m_isUpsideDown ? -1.0 : 1.0;
+
+        char logMsg[256];
+
+        if (player->m_isDart) {
+            // Wave corridor deflection
+            player->pushButton(PlayerButton::Jump);
+            player->setPositionY(player->getPositionY() + static_cast<float>(4.0 * grav));
+            std::snprintf(logMsg, sizeof(logMsg), "[BUFFER SAVED] Wave corridor hazard deflected! (Ticks: %d)\n", maxTicks);
+        } 
+        else if (player->m_isShip || player->m_isSwing) {
+            // Ship / Swing vector adjustment
+            player->m_yVelocity = 5.0 * grav;
+            player->setPositionY(player->getPositionY() + static_cast<float>(4.0 * grav));
+            std::snprintf(logMsg, sizeof(logMsg), "[BUFFER SAVED] Ship/Swing obstacle bypassed! (Ticks: %d)\n", maxTicks);
+        } 
+        else {
+            // Cube / Ball / Spider / Robot / UFO frame-perfect jump & spike rescue
+            player->m_isOnGround = true;
+            player->pushButton(PlayerButton::Jump);
+            if (player->m_yVelocity * grav < 11.0) {
+                player->m_yVelocity = 11.5 * grav;
+            }
+            player->setPositionY(player->getPositionY() + static_cast<float>(4.0 * grav));
+            std::snprintf(logMsg, sizeof(logMsg), "[BUFFER SAVED] 100-Frame-Perfect spike death prevented! (Ticks: %d)\n", maxTicks);
+        }
+
+        BufferEngine::sendToCMD(logMsg);
+        BufferEngine::internalBypass = false;
     }
 };
