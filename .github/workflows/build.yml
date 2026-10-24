@@ -1,0 +1,33 @@
+name: Build Geode Mod
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows .geode
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Geode Mod
+        id: build
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          sdk: latest
+          cli: latest
+          build-config: Release
+
+      - name: Upload .geode Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PredictiveBuffer-Vortex-Geode
+          path: |
+            ${{ steps.build.outputs.build-output }}
+            build/*.geode
+          if-no-files-found: error
