@@ -1,0 +1,37 @@
+{
+    "geode": "5.11.2",
+    "gd": {
+        "win": "2.2081"
+    },
+    "id": "ai.predictivebuffer",
+    "name": "Predictive Buffer Vortex",
+    "version": "v4.0.0",
+    "developer": "harmfulfoid",
+    "description": "True tick-based predictive input buffer with live F6/F7 console and clean sub-tick injection.",
+    "settings": {
+        "enabled": {
+            "type": "bool",
+            "name": "Enable Buffer",
+            "default": true
+        },
+        "custom-ticks": {
+            "type": "int",
+            "name": "Ground / Cube Buffer Ticks",
+            "default": 16,
+            "min": 1,
+            "max": 100
+        },
+        "custom-wave-ticks": {
+            "type": "int",
+            "name": "Wave / Ship Buffer Ticks",
+            "default": 12,
+            "min": 1,
+            "max": 60
+        },
+        "open-console": {
+            "type": "bool",
+            "name": "Open CMD Console",
+            "default": true
+        }
+    }
+}
